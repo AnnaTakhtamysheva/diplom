@@ -1,33 +1,62 @@
 {
-  "name": "new_meta",
+  "name": "metagraph-viewer",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@testing-library/jest-dom": "^5.16.5",
-    "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^13.5.0",
-    "@types/jest": "^27.5.2",
-    "@types/node": "^16.18.16",
-    "@types/react": "^18.0.28",
-    "@types/react-dom": "^18.0.11",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@testing-library/jest-dom": "^5.16.4",
+    "@testing-library/react": "^13.2.0",
+    "@testing-library/user-event": "^14.2.0",
+    "@types/node": "^17.0.35",
+    "@types/react": "^18.0.9",
+    "@types/react-dom": "^18.0.5",
+    "@typescript-eslint/parser": "^5.26.0",
+    "d3": "^7.4.4",
+    "graphology": "^0.24.1",
+    "graphology-graphml": "^0.5.1",
+    "graphology-types": "^0.24.4",
+    "lodash.throttle": "^4.1.1",
+    "mobx": "^6.6.0",
+    "mobx-react": "^7.5.0",
+    "prettier": "^2.6.2",
+    "prettier-eslint": "^15.0.0",
+    "react": "^18.1.0",
+    "react-dom": "^18.1.0",
+    "react-force-graph-3d": "^1.21.12",
     "react-scripts": "5.0.1",
-    "typescript": "^4.9.5",
+    "three": "^0.140.2",
+    "three-forcegraph": "^1.39.4",
+    "typescript": "^4.7.2",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "REACT_APP_BUILD_TARGET=lib react-app-rewired build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "component": "node new-comp.js",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
+    "lint": "eslint --fix"
   },
   "eslintConfig": {
     "extends": [
       "react-app",
       "react-app/jest"
-    ]
+    ],
+    "rules": {
+      "max-len": [
+        "warn",
+        {
+          "code": 90
+        }
+      ],
+      "quotes": [
+        "error",
+        "single"
+      ]
+    }
   },
+  "prettier": {},
   "browserslist": {
     "production": [
       ">0.2%",
@@ -39,5 +68,16 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@types/d3": "^7.4.0",
+    "@types/jest": "^29.5.0",
+    "@types/lodash.throttle": "^4.1.7",
+    "@types/three": "^0.140.0",
+    "eslint": "^8.16.0",
+    "eslint-plugin-react": "^7.30.0",
+    "gh-pages": "^4.0.0",
+    "react-app-rewired": "^2.2.1",
+    "rewire": "^6.0.0"
   }
 }

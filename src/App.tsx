@@ -1,26 +1,45 @@
 import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import Toolbar from './components/Toolbar';
+import {observer} from 'mobx-react';
+import ThemeStore, {ThemeStoreContext} from './modules/store/ThemeStore';
+import GraphStore, {GraphStoreContext} from './modules/store/GraphStore';
+import {useLocalStore} from './utils/useLocalStore';
+import ForceGraph from './components/ForceGraph';
+import ModalStore, { ModalStoreContext } from './modules/store/ModalStore';
+import {Modal} from './components/Modal';
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
+
+/** Режим работы приложения */
+export enum Mode {
+    /** Режим библиотеки */
+    library = 'library',
+    /** Демо-режим */
+    demo = 'demo',
 }
 
-export default App;
+type Props = {
+    /** Режим работы приложения: Библиотека или Демо-режим */
+    // mode: Mode | undefined;
+    mode: Mode;
+    /** Данные о вершинах и ребрах метаграфа в виде строки */
+    // graphString: string | undefined;
+    graphString: string;
+};
+
+const App: React.FC<Props> = ({mode, graphString}: Props) => {
+    const graphStore = useLocalStore(() => new GraphStore(graphString));
+
+    return (
+        <ThemeStoreContext.Provider value={ThemeStore}>
+            <GraphStoreContext.Provider value={graphStore}>
+                {mode === Mode.demo && <Toolbar/>}
+                <ModalStoreContext.Provider value={ModalStore}>
+                    <ForceGraph/>
+                    <Modal/>
+                    </ModalStoreContext.Provider>
+            </GraphStoreContext.Provider>
+        </ThemeStoreContext.Provider>
+);
+};
+
+export default observer(App);
