@@ -125,7 +125,7 @@ const {openModal} = useModalStore()
             linkDirectionalParticleWidth={6}
             onNodeClick={showModal}
             showNavInfo={false}
-            linkDirectionalParticles={() => 10}
+            // linkDirectionalParticles={() => 10}
             nodeThreeObject={
                 (vertex: NodeObject) => {
                     const nested = getNested(vertex);

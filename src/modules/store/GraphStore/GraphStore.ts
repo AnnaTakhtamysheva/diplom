@@ -158,17 +158,14 @@ class GraphStore implements ILocalStore {
   /** Только видимые вершины (без скрытых внутри неразвернутых метавершин) */
   get vertices(): NodeEntry[] {
     const excludeCollapsed = this.allVertices.filter((vertex: NodeEntry) => {
-      const match = vertex.node.match(/(.*)::.*/);
-      const isNested = Boolean(match);
+      const isNested = !!vertex.attributes
+        .metagraph as unknown as MetagraphClass;
 
       if (!isNested) {
         return true;
       }
 
-      // return false;
-
-      const [, parentId] = match || [];
-      return this._expandedNodes.has(parentId);
+      return false;
     });
 
     return excludeCollapsed;
