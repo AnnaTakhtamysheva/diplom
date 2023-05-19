@@ -65,12 +65,18 @@ const {openModal} = useModalStore()
     useEffect(() => {
         const fg = graphRef.current as ForceGraphMethods;
 
+
+
         if (!fg) return;
+
+        fg.controls()
+
+        fg.cameraPosition({x: -20, y: 200, z: 20}, {x: 1200, y: 100, z: 500})
 
         // @ts-ignore
         fg.d3Force('charge', d3.forceManyBody().strength((vertex: NodeObject) => {
             // @ts-ignore
-            const match = vertex.id.match(/(.*)::.*/);
+            const match = vertex.attributes?.metagraph;
 
             return match ? -1500 : -1500;
         }));
@@ -125,7 +131,7 @@ const {openModal} = useModalStore()
             linkDirectionalParticleWidth={6}
             onNodeClick={showModal}
             showNavInfo={false}
-            linkDirectionalParticles={() => 10}
+            // linkDirectionalParticles={() => 10}
             nodeThreeObject={
                 (vertex: NodeObject) => {
                     const nested = getNested(vertex);

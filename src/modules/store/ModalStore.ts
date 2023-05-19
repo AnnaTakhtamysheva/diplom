@@ -1,6 +1,6 @@
 import { makeAutoObservable } from 'mobx';
 import React, { useContext } from 'react';
-import {ModalProps} from "../../components/Modal/Modal";
+import {ModalProps} from '../../components/Modal/Modal';
 
 class ModalStore {
     public isModalActive = false;
