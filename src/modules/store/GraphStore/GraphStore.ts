@@ -6,7 +6,11 @@ import { EdgeEntry, NodeEntry } from 'graphology-types';
 import { GraphData, NodeObject } from 'react-force-graph-3d';
 import graphDataTest from '../../../data/test.json';
 
-type PrivateFields = '_expandedNodes' | '_graphModel';
+type PrivateFields =
+  | '_expandedNodes'
+  | '_graphModel'
+  | '_currentVisibleGraph'
+  | '_rootId';
 
 // =======================================
 export interface Metagraph {
@@ -85,12 +89,16 @@ const getEdgesVertexID = (node: string | NodeObject): string =>
 
 class GraphStore implements ILocalStore {
   private _graphModel: UndirectedGraph | null = null;
+  private _currentVisibleGraph: UndirectedGraph | null = null;
   private _expandedNodes = new Set<string>();
+  private _rootId: string | null = null;
 
   constructor(graphData?: string) {
     makeObservable<GraphStore, PrivateFields>(this, {
       _expandedNodes: observable,
-      _graphModel: observable.ref,
+      _graphModel: observable,
+      _rootId: observable,
+      _currentVisibleGraph: observable.ref,
       expandNode: action.bound,
       setGraphData: action.bound,
       vertices: computed,
@@ -108,7 +116,7 @@ class GraphStore implements ILocalStore {
     this._graphModel = browser.parse(UndirectedGraph, data);
   };
 
-  initGraph = (data: Metagraph) => {
+  getGraphData = (data: Metagraph) => {
     const graph = new Graph({ multi: true });
     const addedVertices = new Set<number>();
     data.meta_vertecies.forEach((vert) => {
@@ -150,12 +158,75 @@ class GraphStore implements ILocalStore {
       }
     });
 
+    return graph;
+  };
+
+  initGraph = (data: Metagraph) => {
+    const graph = this.getGraphData(data);
+    this._currentVisibleGraph = graph;
     this._graphModel = graph;
   };
 
   /** Раскрыть метавершину, чтобы увидеть ее содержимое */
-  expandNode = (vertex: NodeObject): void => {
+  expandNode = (vertex: NodeObjectWithInfo): void => {
     this._expandedNodes.add(String(vertex.id));
+    /////////////////////////////
+
+    if (vertex.metagraph) {
+      const innerEdges =
+        Array.from(this._graphModel?.edgeEntries()!).filter((edge) => {
+          const hasSource = vertex.metagraph?.meta_vertecies.includes(
+            +edge.source
+          );
+
+          const hasTarget = vertex.metagraph?.meta_vertecies.includes(
+            +edge.target
+          );
+          const hasVertex =
+            edge.source === vertex.id || edge.target === vertex.id;
+
+          return [hasSource, hasTarget, hasVertex].filter(Boolean).length === 2;
+        }) ?? [];
+
+      const allNodes = Array.from(this._graphModel?.nodeEntries()!);
+
+      const innerNodes = allNodes.filter((node) =>
+        vertex.metagraph?.meta_vertecies.includes(+node.node)
+      );
+
+      const rootNode = allNodes.find((node) => node.node === vertex.id);
+
+      const metaEdges: MetaEdge[] = innerNodes.map((innerNode, index) => ({
+        id: innerNodes.length + index,
+        metagraph: null,
+        oriented: true,
+        payload: [],
+        vertex_end: +innerNode.node,
+        vertex_start: +rootNode?.node!,
+      }));
+
+      const vertexMetagraph: Metagraph = {
+        meta_edges: innerEdges
+          .map((edge, index) => ({
+            id: index,
+            oriented: !edge.undirected,
+            metagraph: edge.attributes.metagraph,
+            payload: edge.attributes.payload,
+            vertex_start: +edge.source,
+            vertex_end: +edge.target,
+          }))
+          .concat(metaEdges),
+        meta_vertecies: innerNodes.concat(rootNode!).map((node) => ({
+          id: +node.node,
+          metagraph: node.attributes.metagraph,
+          payload: node.attributes.payload,
+        })),
+      };
+      console.log({ vertexMetagraph });
+      const graph = this.getGraphData(vertexMetagraph);
+      this._currentVisibleGraph = graph;
+      this._rootId = rootNode?.node ?? null;
+    }
   };
 
   isExpanded = (vertexId: string): boolean => this._expandedNodes.has(vertexId);
@@ -189,7 +260,8 @@ class GraphStore implements ILocalStore {
   /** Все вершины метаграфа, вне зависимости от состояния родителей */
   get allVertices(): NodeEntryWithInfo[] {
     return [
-      ...((this._graphModel?.nodeEntries() ?? []) as NodeEntryWithInfo[]),
+      ...((this._currentVisibleGraph?.nodeEntries() ??
+        []) as NodeEntryWithInfo[]),
     ];
   }
 
@@ -197,7 +269,9 @@ class GraphStore implements ILocalStore {
   get vertices(): NodeEntryWithInfo[] {
     const excludeCollapsed = this.allVertices.filter(
       (vertex: NodeEntryWithInfo) => {
-        const isNested = !!vertex.attributes.parentId;
+        const isNested =
+          !!vertex.attributes.parentId &&
+          `${vertex.attributes.parentId}` !== this._rootId;
 
         if (!isNested) {
           return true;
@@ -212,7 +286,10 @@ class GraphStore implements ILocalStore {
 
   /** Все ребра метаграфа, вне зависимости от состояние вершин, которые они соединяют */
   get allEdges(): EdgeEntryWithInfo[] {
-    return [...(this._graphModel?.edgeEntries() ?? ([])) as EdgeEntryWithInfo[]];
+    return [
+      ...((this._currentVisibleGraph?.edgeEntries() ??
+        []) as EdgeEntryWithInfo[]),
+    ];
   }
 
   /**
@@ -220,29 +297,61 @@ class GraphStore implements ILocalStore {
    * (без ребер, начало и/или конец которых скрыты внутри неразвернутых метавершин)
    */
   get edges(): EdgeEntryWithInfo[] {
+    console.log({
+      allEdges: this.allEdges,
+      vert: this.vertices,
+    });
     const existing = this.allEdges.filter((edge: EdgeEntryWithInfo) => {
+      if (this._rootId) {
+        return true;
+      }
       const hasSource = this.vertices.some(
-        (vertex: NodeEntryWithInfo) => vertex.node === getEdgesVertexID(edge.source)
+        (vertex: NodeEntryWithInfo) =>
+          vertex.node === getEdgesVertexID(edge.source)
       );
       const hasTarget = this.vertices.some(
-        (vertex: NodeEntryWithInfo) => vertex.node === getEdgesVertexID(edge.target)
+        (vertex: NodeEntryWithInfo) =>
+          vertex.node === getEdgesVertexID(edge.target)
       );
 
-      return hasTarget && hasSource;
+      const hasRoot =
+        this._rootId === edge.source || this._rootId === edge.target;
+
+      return [hasTarget, hasSource, hasRoot].filter(Boolean).length === 2;
     });
 
     const result = existing.filter((edge: EdgeEntry) => {
+      if (this._rootId) {
+        return true;
+      }
       // return true;
       const source = getEdgesVertexID(edge?.source);
       const target = getEdgesVertexID(edge?.target);
 
-      const isComplex1 = !!this._graphModel?.getNodeAttribute(source, 'metagraph');
-      const isComplex2 = !!this._graphModel?.getNodeAttribute(target, 'metagraph');
+      const isComplex1 = !!this._currentVisibleGraph?.getNodeAttribute(
+        source,
+        'metagraph'
+      );
+      const isComplex2 = !!this._currentVisibleGraph?.getNodeAttribute(
+        target,
+        'metagraph'
+      );
 
       if (!isComplex1 && !isComplex2) return true;
 
-      const parent1 = this._graphModel?.getNodeAttribute(source, 'parentId');
-      const parent2 = this._graphModel?.getNodeAttribute(target, 'parentId');
+      const parent1 = this._currentVisibleGraph?.getNodeAttribute(
+        source,
+        'parentId'
+      );
+      const parent2 = this._currentVisibleGraph?.getNodeAttribute(
+        target,
+        'parentId'
+      );
+
+      console.log({
+        parent1,
+        parent2,
+      });
 
       return (
         (this._expandedNodes.has(parent1) || !parent1) &&

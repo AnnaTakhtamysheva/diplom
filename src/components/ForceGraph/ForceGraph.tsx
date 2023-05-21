@@ -71,7 +71,11 @@ const ForceGraph: React.FC = () => {
     (node: NodeObject) => {
       console.log({ node });
       if ((node as NodeObjectWithInfo).metagraph) {
-        openModal({ title: 'Метаграф', onSubmit: () => expandNode(node) });
+        openModal({
+          title: 'Метаграф',
+          onSubmit: () => expandNode(node as NodeObjectWithInfo),
+          content: 'Хотите просмотреть метаграф?'
+        });
       }
     },
     [expandNode, openModal]
@@ -87,7 +91,11 @@ const ForceGraph: React.FC = () => {
 
     fg.cameraPosition(
       { x: -20, y: 200, z: 20 },
-      { x: cameraLookAtPoint.x!, y: cameraLookAtPoint.y!, z: cameraLookAtPoint.z! }
+      {
+        x: cameraLookAtPoint.x!,
+        y: cameraLookAtPoint.y!,
+        z: cameraLookAtPoint.z!,
+      }
     );
 
     // @ts-ignore
@@ -124,7 +132,7 @@ const ForceGraph: React.FC = () => {
         sourceHasNested || targetHasNested ? 300 * radiusKoef : 10;
       return distance;
     });
-  }, [graphRef.current]);
+  }, [graphRef.current, graphDataNormalized]);
 
   const getNodeThreeObject = useCallback(
     (vertex: NodeObject) => {
