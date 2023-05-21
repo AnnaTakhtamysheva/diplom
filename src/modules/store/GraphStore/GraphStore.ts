@@ -63,6 +63,20 @@ export enum FluffyType {
   Int = 'int',
   String = 'string',
 }
+
+export type NodeObjectWithInfo = NodeObject & {
+  payload: MetaVertecyPayload[];
+  metagraph: MetagraphClass | null;
+  parentId?: number;
+};
+
+export type NodeEntryWithInfo = NodeEntry<
+  Pick<NodeObjectWithInfo, 'payload' | 'metagraph' | 'parentId'>
+>;
+
+export type EdgeEntryWithInfo = EdgeEntry<
+  Pick<MetaEdge, 'payload' | 'metagraph'>
+>;
 // =======================================
 
 /** Получить id вершины для начала/конца ребра. Нужно, тк там может быть как id, так и object */
@@ -96,12 +110,32 @@ class GraphStore implements ILocalStore {
 
   initGraph = (data: Metagraph) => {
     const graph = new Graph({ multi: true });
-    data.meta_vertecies.map((vert) =>
-      graph.addNode(vert.id, {
-        metagraph: vert.metagraph,
-        payload: vert.payload,
-      })
-    );
+    const addedVertices = new Set<number>();
+    data.meta_vertecies.forEach((vert) => {
+      if (addedVertices.has(vert.id)) {
+        graph.setNodeAttribute(vert.id, 'metagraph', vert.metagraph);
+        graph.setNodeAttribute(vert.id, 'payload', vert.payload);
+      } else {
+        addedVertices.add(vert.id);
+        graph.addNode(vert.id, {
+          metagraph: vert.metagraph,
+          payload: vert.payload,
+        });
+      }
+      if (vert.metagraph) {
+        vert.metagraph?.meta_vertecies?.forEach((v) => {
+          if (addedVertices.has(v)) {
+            graph.setNodeAttribute(v, 'parentId', vert.id);
+          } else {
+            addedVertices.add(v);
+
+            graph.addNode(v, {
+              parentId: vert.id,
+            });
+          }
+        });
+      }
+    });
     data.meta_edges.map((edge) => {
       if (edge.payload.find((el) => el.name === PurpleName.Directed)?.value) {
         graph.addDirectedEdge(edge.vertex_start, edge.vertex_end, {
@@ -127,13 +161,15 @@ class GraphStore implements ILocalStore {
   isExpanded = (vertexId: string): boolean => this._expandedNodes.has(vertexId);
 
   /** Получить содержимое метавершины */
-  getNested = (vertex: NodeObject): GraphData => {
-    const nodes: NodeObject[] = (
+  getNested = (vertex: NodeObjectWithInfo): GraphData => {
+    const nodes: NodeObjectWithInfo[] = (
       this.allVertices.filter((v) => {
-        const [, parentId] = v.node.match(/(.*)::.*/) || [];
-        return Boolean(parentId === vertex.id) && this.isExpanded(parentId);
+        return (
+          Boolean(vertex.id === v.attributes.parentId) &&
+          this.isExpanded(`${vertex.id}`)
+        );
       }) ?? []
-    ).map(({ node: id, attributes }) => ({ ...attributes, id }));
+    ).map((node) => ({ id: node.node, ...node.attributes }));
 
     const links =
       this.allEdges.filter(
@@ -151,42 +187,45 @@ class GraphStore implements ILocalStore {
   };
 
   /** Все вершины метаграфа, вне зависимости от состояния родителей */
-  get allVertices(): NodeEntry[] {
-    return [...(this._graphModel?.nodeEntries() ?? ([] as NodeEntry[]))];
+  get allVertices(): NodeEntryWithInfo[] {
+    return [
+      ...((this._graphModel?.nodeEntries() ?? []) as NodeEntryWithInfo[]),
+    ];
   }
 
   /** Только видимые вершины (без скрытых внутри неразвернутых метавершин) */
-  get vertices(): NodeEntry[] {
-    const excludeCollapsed = this.allVertices.filter((vertex: NodeEntry) => {
-      const isNested = !!vertex.attributes
-        .metagraph as unknown as MetagraphClass;
+  get vertices(): NodeEntryWithInfo[] {
+    const excludeCollapsed = this.allVertices.filter(
+      (vertex: NodeEntryWithInfo) => {
+        const isNested = !!vertex.attributes.parentId;
 
-      if (!isNested) {
-        return true;
+        if (!isNested) {
+          return true;
+        }
+
+        return false;
       }
-
-      return false;
-    });
+    );
 
     return excludeCollapsed;
   }
 
   /** Все ребра метаграфа, вне зависимости от состояние вершин, которые они соединяют */
-  get allEdges(): EdgeEntry[] {
-    return [...(this._graphModel?.edgeEntries() ?? ([] as EdgeEntry[]))];
+  get allEdges(): EdgeEntryWithInfo[] {
+    return [...(this._graphModel?.edgeEntries() ?? ([])) as EdgeEntryWithInfo[]];
   }
 
   /**
    * Только видимые ребра метаграфа
    * (без ребер, начало и/или конец которых скрыты внутри неразвернутых метавершин)
    */
-  get edges(): EdgeEntry[] {
-    const existing = this.allEdges.filter((edge: EdgeEntry) => {
+  get edges(): EdgeEntryWithInfo[] {
+    const existing = this.allEdges.filter((edge: EdgeEntryWithInfo) => {
       const hasSource = this.vertices.some(
-        (vertex: NodeEntry) => vertex.node === getEdgesVertexID(edge.source)
+        (vertex: NodeEntryWithInfo) => vertex.node === getEdgesVertexID(edge.source)
       );
       const hasTarget = this.vertices.some(
-        (vertex: NodeEntry) => vertex.node === getEdgesVertexID(edge.target)
+        (vertex: NodeEntryWithInfo) => vertex.node === getEdgesVertexID(edge.target)
       );
 
       return hasTarget && hasSource;
@@ -194,16 +233,16 @@ class GraphStore implements ILocalStore {
 
     const result = existing.filter((edge: EdgeEntry) => {
       // return true;
-      const match1 = getEdgesVertexID(edge?.source).match?.(/(.*)::.*/);
-      const match2 = getEdgesVertexID(edge?.target).match?.(/(.*)::.*/);
+      const source = getEdgesVertexID(edge?.source);
+      const target = getEdgesVertexID(edge?.target);
 
-      const isComplex1 = Boolean(match1);
-      const isComplex2 = Boolean(match2);
+      const isComplex1 = !!this._graphModel?.getNodeAttribute(source, 'metagraph');
+      const isComplex2 = !!this._graphModel?.getNodeAttribute(target, 'metagraph');
 
       if (!isComplex1 && !isComplex2) return true;
 
-      const [, parent1] = match1 || [];
-      const [, parent2] = match2 || [];
+      const parent1 = this._graphModel?.getNodeAttribute(source, 'parentId');
+      const parent2 = this._graphModel?.getNodeAttribute(target, 'parentId');
 
       return (
         (this._expandedNodes.has(parent1) || !parent1) &&

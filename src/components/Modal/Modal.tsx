@@ -44,6 +44,7 @@ export const Modal: React.FC = () => {
                 <div className={'modal__content'}>
                     {  }
                 </div>
+                <button onClick={onSubmit}>Да</button>
             </div>
         </div>
     ) : null;
